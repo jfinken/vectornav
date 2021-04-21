@@ -180,7 +180,23 @@ private:
       msg.angular_velocity = msg_in->angularrate;
       msg.linear_acceleration = msg_in->accel;
 
-      fill_covariance_from_param("orientation_covariance", msg.orientation_covariance);
+      // fill_covariance_from_param("orientation_covariance", msg.orientation_covariance);
+
+      // NOTE regarding the YPRU:
+      // The attitude data will be derived from either the AHRS or the INS, 
+      // depending upon which filter is currently active and tracking. All 
+      // of the fields in this group will only be valid if the AHRS/INS filter
+      // is currently enabled and tracking.
+      // The point: assert you have achieved INSSTATUS_TRACKING before trusting
+      // this uncertainty
+
+      // convert YPRU from NED to ENU
+      const std::vector<double> orientation_covariance_ = {
+          ypru_.y, 0.0000, 0.0000, 0.0000, ypru_.x, 0.0000, 0.0000, 0.0000, -ypru_.z};
+      // copy in the YPR uncertainty
+      std::copy(orientation_covariance_.begin(), orientation_covariance_.end(), msg.orientation_covariance.begin());
+
+      // Via yaml if available
       fill_covariance_from_param("angular_velocity_covariance", msg.angular_velocity_covariance);
       fill_covariance_from_param("linear_acceleration_covariance",
                                  msg.linear_acceleration_covariance);
@@ -253,9 +269,12 @@ private:
       // Covariance (Convert NED to ENU)
       /// TODO(Dereck): Use DOP for better estimate?
       const std::vector<double> orientation_covariance_ = {
-          gps_posu_.y, 0.0000, 0.0000, 0.0000, gps_posu_.x, 0.0000, 0.0000, 0.0000, gps_posu_.z};
+          gps_posu_.y, 0.0000, 0.0000, 0.0000, gps_posu_.x, 0.0000, 0.0000, 0.0000, -gps_posu_.z};
 
       msg.position_covariance_type = sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN;
+
+      // copy in the position uncertainty
+      std::copy(orientation_covariance_.begin(), orientation_covariance_.end(), msg.position_covariance.begin());
 
       pub_gnss_->publish(msg);
     }
@@ -292,6 +311,10 @@ private:
       msg.pose.pose.orientation = toMsg(q_ned2enu * q_enu2ecef * q);
 
       /// TODO(Dereck): Pose Covariance
+      //  JF: 9x9 we could: 
+      //  - populate UL 3x3 diag with gps_posu_ (as ENU)
+      //  - populate continuing 3x3 diag with YPR uncertainty from the attitudeGroup
+      //  valid?
 
       pub_pose_->publish(msg);
     }
@@ -319,7 +342,10 @@ private:
   /** Convert VN attitude group data to ROS2 standard message types
    *
    */
-  void sub_vn_attitude(const vectornav_msgs::msg::AttitudeGroup::SharedPtr msg_in) const {}
+  void sub_vn_attitude(const vectornav_msgs::msg::AttitudeGroup::SharedPtr msg_in) {
+
+    ypru_ = msg_in->ypru;
+  }
 
   /** Convert VN ins group data to ROS2 standard message types
    *
@@ -421,6 +447,7 @@ private:
   // State Vars
   uint8_t gps_fix_ = vectornav_msgs::msg::GpsGroup::GPSFIX_NOFIX;
   geometry_msgs::msg::Vector3 gps_posu_;
+  geometry_msgs::msg::Vector3 ypru_;
   geometry_msgs::msg::Vector3 ins_velbody_;
   geometry_msgs::msg::Point ins_posecef_;
 };
