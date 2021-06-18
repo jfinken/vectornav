@@ -308,7 +308,9 @@ private:
 
       fromMsg(msg_in->quaternion, q);
 
-      msg.pose.pose.orientation = toMsg(q_ned2enu * q_enu2ecef * q);
+      // msg.pose.pose.orientation = toMsg(q_ned2enu * q_enu2ecef * q);
+      // JF 2021-06-18: leave this quaternion in ENU
+      msg.pose.pose.orientation = toMsg(q_ned2enu * q);
 
       /// TODO(Dereck): Pose Covariance
       //  JF: 9x9 we could: 
